@@ -1,4 +1,4 @@
-import { S_BOX } from "./constants.controller.js";
+import { GALOISX2, GALOISX3, MATCONSTANT, SBOX } from "./constants.controller.js";
 /**
  * Crea la matriz de estado 4x4 para AES a partir de una cadena.
  * @param input Cadena de texto (mensaje o clave).
@@ -64,7 +64,7 @@ export function addRoundKey(state, key) {
 /**
  *
  * @param stateRoundKey Matriz 4x4 obtenida de la función addRoundKey
- * @returns Matriz de la interseccion con la S_BOX
+ * @returns Matriz de la interseccion con la SBOX
  */
 export function subBytes(stateRoundKey) {
     const newState = [];
@@ -74,7 +74,7 @@ export function subBytes(stateRoundKey) {
             const byte = stateRoundKey[i][j]; //obtengo el byte
             const rowDigit = parseInt(byte[0], 16); //obtengo el primer digito
             const columnDigit = parseInt(byte[1], 16); //obtengo el segundo digito
-            newState[i][j] = S_BOX[rowDigit][columnDigit].toString(16).padStart(2, '0');
+            newState[i][j] = SBOX[rowDigit][columnDigit].toString(16).padStart(2, '0');
         }
     }
     return newState;
@@ -86,6 +86,33 @@ export function shiftRows(subBytesMat) {
         newState[i] = [];
         for (let j = 0; j < 4; j++) {
             newState[i][j] = subBytesMat[i][(j + i) % 4];
+        }
+    }
+    return newState;
+}
+export function mixColumns(shiftRowsMat) {
+    const newState = [];
+    for (let col = 0; col < 4; col++) { //col-> notacion para extraer la columna de la matriz constante
+        //obtengo los valores de la columna actual
+        const originalColumn = shiftRowsMat.map(row => row[col], 16);
+        const newColumn = [0, 0, 0, 0];
+        for (let i = 0; i < 4; i++) {
+            newColumn[i] = MATCONSTANT[i].reduce((acc, multiplier, index) => {
+                const value = originalColumn[index];
+                if (multiplier === 1)
+                    return acc ^ value;
+                if (multiplier === 2)
+                    return acc ^ GALOISX2[value >> 4][value & 0x0f]; //Divide el byte (value) en su parte alta (value >> 4) y su parte baja (value & 0x0f).
+                if (multiplier === 3)
+                    return acc ^ GALOISX3[value >> 4][value & 0x0f]; // se usa para buscar el valor en la tabla de Galois
+                return acc;
+            }, 0);
+        }
+        // Guardamos la nueva columna en el estado
+        for (let row = 0; row < 4; row++) {
+            if (!newState[row])
+                newState[row] = [];
+            newState[row][col] = newColumn[row].toString(16).padStart(2, '0');
         }
     }
     return newState;
