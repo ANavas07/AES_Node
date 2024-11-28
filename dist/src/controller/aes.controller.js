@@ -117,4 +117,35 @@ export function mixColumns(shiftRowsMat) {
     }
     return newState;
 }
+;
+export function generateRoundKeys(initialKey) {
+    const RCON = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36]; // Constantes de ronda
+    const roundKeys = [initialKey.map(row => [...row])]; //Clave incial  como primer elemento
+    for (let round = 1; round < 11; round++) {
+        const prevKey = roundKeys[round - 1];
+        const newKey = [[], [], [], []];
+        //Primera palabra de la clave
+        const lastColumn = prevKey.map(row => row[3]);
+        const rotated = [...lastColumn.slice(1), lastColumn[0]]; //Rotword
+        const subWord = rotated.map(byte => subBytes([[byte]])[0][0]); //SubBytes
+        const rconXOR = (parseInt(subWord[0], 16) ^ RCON[round - 1]).toString(16).padStart(2, '0'); //Rcon XOR
+        newKey[0][0] = rconXOR;
+        for (let i = 1; i < 4; i++) {
+            newKey[i][0] = (parseInt(subWord[i], 16) ^ parseInt(prevKey[i][0], 16)).toString(16).padStart(2, '0');
+        }
+        ;
+        // Otras palabras
+        for (let col = 1; col < 4; col++) {
+            for (let row = 0; row < 4; row++) {
+                newKey[row][col] = (parseInt(newKey[row][col - 1], 16) ^ parseInt(prevKey[row][col], 16)).toString(16).padStart(2, '0');
+            }
+            ;
+        }
+        ;
+        roundKeys.push(newKey);
+    }
+    ;
+    return roundKeys;
+}
+;
 //# sourceMappingURL=aes.controller.js.map
