@@ -7,13 +7,13 @@ import { GALOISX2, GALOISX3, MATCONSTANT, SBOX } from "./constants.controller.js
  * Trabajo en decimal ya que es más fácil de trabajar al momento de pasar a binario para operaciones XOR.
  */
 export function createState(input) {
-    const paddedInput = input.padEnd(16, '\0'); // Relleno para un único bloque de 16 bytes
+    const paddedInput = input.padEnd(16, '\0');
     const state = [];
     for (let i = 0; i < 4; i++) {
-        state[i] = []; //crea una nueva fila
+        state[i] = [];
         for (let j = 0; j < 4; j++) {
             const byte = paddedInput.charCodeAt(i * 4 + j);
-            state[i][j] = byte;
+            state[i][j] = byte; // Mantén en decimal
         }
     }
     return state;
@@ -37,6 +37,7 @@ export function createStates(input) {
                 const byte = block.charCodeAt(i * 4 + j);
                 state[i][j] = byte;
             }
+            ;
         }
         states.push(state);
     }
@@ -55,7 +56,7 @@ export function addRoundKey(state, key) {
         newState[i] = []; //crea una nueva fila
         for (let j = 0; j < 4; j++) {
             const result = state[i][j] ^ key[i][j]; //^ OPERADOR XOR -> o necesito pasarlo a binario ya que opera a nivel de bits
-            newState[i][j] = result.toString(16).padStart(2, '0'); // convierto a hexadecimal
+            newState[i][j] = result; // convierto a hexadecimal
         }
     }
     return newState;
@@ -69,17 +70,16 @@ export function addRoundKey(state, key) {
 export function subBytes(stateRoundKey) {
     const newState = [];
     for (let i = 0; i < 4; i++) {
-        newState[i] = []; //crea una nueva fila
+        newState[i] = []; // Crea una nueva fila
         for (let j = 0; j < 4; j++) {
-            const byte = stateRoundKey[i][j]; //obtengo el byte
-            const rowDigit = parseInt(byte[0], 16); //obtengo el primer digito
-            const columnDigit = parseInt(byte[1], 16); //obtengo el segundo digito
-            newState[i][j] = SBOX[rowDigit][columnDigit].toString(16).padStart(2, '0');
+            const byte = stateRoundKey[i][j]; // Obtengo el byte en decimal
+            const rowDigit = byte >> 4; // Parte alta del byte (primer dígito)
+            const columnDigit = byte & 0x0f; // Parte baja del byte (segundo dígito)
+            newState[i][j] = SBOX[rowDigit][columnDigit]; // Busca en la S-Box y convierte a decimal
         }
     }
     return newState;
 }
-;
 export function shiftRows(subBytesMat) {
     const newState = [];
     for (let i = 0; i < 4; i++) {
@@ -112,7 +112,7 @@ export function mixColumns(shiftRowsMat) {
         for (let row = 0; row < 4; row++) {
             if (!newState[row])
                 newState[row] = [];
-            newState[row][col] = newColumn[row].toString(16).padStart(2, '0');
+            newState[row][col] = newColumn[row];
         }
     }
     return newState;
@@ -121,23 +121,31 @@ export function mixColumns(shiftRowsMat) {
 export function generateRoundKeys(initialKey) {
     const RCON = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36]; // Constantes de ronda
     const roundKeys = [initialKey.map(row => [...row])]; //Clave incial  como primer elemento
+    //generacion de claves para cada ronda
     for (let round = 1; round < 11; round++) {
-        const prevKey = roundKeys[round - 1];
-        const newKey = [[], [], [], []];
+        const prevKey = roundKeys[round - 1]; //recupera las claves de la ronda anterior
+        const newKey = [[], [], [], []]; //matriz 4x4 para la nueva clave
         //Primera palabra de la clave
-        const lastColumn = prevKey.map(row => row[3]);
+        const lastColumn = prevKey.map(row => row[3]); //ultima columna de la clave anterior. Esta columna se transformará para generar la primera palabra de la nueva clave.
         const rotated = [...lastColumn.slice(1), lastColumn[0]]; //Rotword
-        const subWord = rotated.map(byte => subBytes([[byte]])[0][0]); //SubBytes
-        const rconXOR = (parseInt(subWord[0], 16) ^ RCON[round - 1]).toString(16).padStart(2, '0'); //Rcon XOR
+        //Adentro de subWord esta subBytes de forma directa
+        const subWord = rotated.map(byte => {
+            const rowDigit = byte >> 4; // Parte alta del byte
+            const columnDigit = byte & 0x0f; // Parte baja del byte
+            return SBOX[rowDigit][columnDigit]; // Busca directamente en la S-Box
+        }); //SubBytes aplicado a cada byte del resultado
+        const rconXOR = subWord[0] ^ RCON[round - 1]; //Rcon XOR
+        //Calcular los bytes de la primera palabra
         newKey[0][0] = rconXOR;
         for (let i = 1; i < 4; i++) {
-            newKey[i][0] = (parseInt(subWord[i], 16) ^ parseInt(prevKey[i][0], 16)).toString(16).padStart(2, '0');
+            //XOR entre el byte correspondiente de subWord y el byte de la columna de clave anterior
+            newKey[i][0] = subWord[i] ^ prevKey[i][0];
         }
         ;
         // Otras palabras
         for (let col = 1; col < 4; col++) {
             for (let row = 0; row < 4; row++) {
-                newKey[row][col] = (parseInt(newKey[row][col - 1], 16) ^ parseInt(prevKey[row][col], 16)).toString(16).padStart(2, '0');
+                newKey[row][col] = newKey[row][col - 1] ^ prevKey[row][col];
             }
             ;
         }
@@ -148,4 +156,37 @@ export function generateRoundKeys(initialKey) {
     return roundKeys;
 }
 ;
+/**
+ * Realiza el cifrado AES completo en bloques.
+ * @param message Matriz de estado dividida en bloques (4x4 cada bloque).
+ * @param roundKeys Claves generadas para cada ronda (11 claves).
+ * @returns Matriz cifrada (bloques transformados).
+ */
+export function aesEncrypt(message, roundKeys) {
+    //Aplicar ADDROUNDKEY inicial
+    let state = message.map((block, index) => addRoundKey(block, roundKeys[0]));
+    //Rondas 1 a 9
+    for (let round = 1; round <= 9; round++) {
+        state = state.map((block) => {
+            block = subBytes(block);
+            block = shiftRows(block);
+            block = mixColumns(block);
+            return addRoundKey(block, roundKeys[round]);
+        });
+    }
+    // Última ronda (sin MixColumns)
+    state = state.map((block) => {
+        block = subBytes(block); // SubBytes
+        block = shiftRows(block); // ShiftRows
+        return addRoundKey(block, roundKeys[10]); // AddRoundKey final
+    });
+    return state;
+}
+export function hexToDecimalMatrix(hexMatrix) {
+    return hexMatrix.map(row => row.map(byte => parseInt(byte, 16)));
+}
+export function formatEncryptedMessage(message) {
+    return message
+        .map(block => block.map(row => row.map(byte => byte.toString(16).padStart(2, '0')).join('')).join('')).join('');
+}
 //# sourceMappingURL=aes.controller.js.map
