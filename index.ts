@@ -1,5 +1,6 @@
 import readline from 'readline';
 import {aesEncrypt, createState, createStates, formatEncryptedMessage, generateRoundKeys } from './src/controller/aes.controller.js';
+import { aesDecrypt } from './src/controller/decrypt.controller.js';
 
 
 const rl = readline.createInterface({
@@ -8,8 +9,6 @@ const rl = readline.createInterface({
 });
 
 rl.question('Ingresa un mensaje a encriptar: ', (message) => {
-    console.log(`El mensaje ingresado es: ${message}`);
-
     //Clave 
     const aesKey: string = 'CaizaAesKey12345';
     if (aesKey.length < 16) {
@@ -25,10 +24,18 @@ rl.question('Ingresa un mensaje a encriptar: ', (message) => {
     console.log("Mensaje cifrado en decimal:", encryptedMessage);
     console.log("Mensaje cifrado en hexadecimal:", encryptedHex);
 
+    const decryptMessage = aesDecrypt(encryptedMessage, roundKeys);
+    console.log("Mensaje descifrado en decimal:", decryptMessage);
+    console.log("Mensaje descifrado en hexadecimal:", convertToText(decryptMessage));
+
     rl.close();
 });
 
-
+export function convertToText(state: number[][][]): string {
+    return state
+        .map(block => block.map(row => String.fromCharCode(...row)).join(''))
+        .join('');
+}
 
 // // messageState.forEach((state, index)=>{
 // //     console.log(`Bloque ${index+1}`, state)
